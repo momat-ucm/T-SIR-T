@@ -28,6 +28,7 @@ T-SIR-T (&theta;-SIR Type Model) is a general deterministic epidemiological mode
 It has been originally designed and applied to simulate the dynamics of the COVID-19 pandemic incorporating all its special characteristics (undetected cases, undetected deaths, quarantine, social distancing, etc.)
 
  For more details about the model and its parameters please refer to the following Preprint:
+ 
  A simple but complex enough θ-SIR type model to be used with COVID-19 real data. Application to the case of Italy.
  A.M. Ramos, M.R. Ferrández, M. Vela-Pérez, B. Ivorra.
  July 2020.
