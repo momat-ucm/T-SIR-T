@@ -29,8 +29,9 @@ It has been originally designed and applied to simulate the dynamics of the COVI
 
  For more details about the model and its parameters please refer to the following Preprint:
  A simple but complex enough θ-SIR type model to be used with COVID-19 real data. Application to the case of Italy.
- A.M. Ramos, M.R. Ferrández, M. Vela-Pérez, B. Ivorra
- July 2020
+ A.M. Ramos, M.R. Ferrández, M. Vela-Pérez, B. Ivorra.
+ July 2020.
+ 
  DOI: 10.13140/RG.2.2.32466.17601
 
  How to run the model?
