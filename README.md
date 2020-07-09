@@ -1,21 +1,21 @@
 # T-SIR Type Model
 &theta;-SIR Type Model
 
-Workgroup:
+## Workgroup
 
 Miriam R. Ferrández (B), Benjamin Ivorra (A), María Vela-Pérez (A), Ángel Manuel Ramos (A)
 
-Institutions: 
+### Institutions: 
 
  (A) MOMAT research group, IMI-Institute & Applied Mathematics Department. Complutense University of Madrid, Spain.
  
  (B) SAL research group, ceiA3 & Dept. of Computer Science. University of Almería, Spain.
 
-Emails:
+### Emails:
  mrferrandez@ual.es, ivorra@ucm.es, maria.vela@ucm.es, angel@mat.ucm.es
  
 
-Details about the model:
+## Details about the model
 
 T-SIR-T (&theta;-SIR Type Model) is a general deterministic epidemiological model to study the evolution of human diseases in a particular territory. The main characteristics of T-SIR-T are: 
 - the inclusion of the biological and sociological mechanisms influencing the disease spread;
@@ -29,13 +29,14 @@ It has been originally designed and applied to simulate the dynamics of the COVI
 
  For more details about the model and its parameters please refer to the following Preprint:
  
+ ## Preprint 
  A simple but complex enough θ-SIR type model to be used with COVID-19 real data. Application to the case of Italy.
  A.M. Ramos, M.R. Ferrández, M. Vela-Pérez, B. Ivorra.
  July 2020.
  
  DOI: 10.13140/RG.2.2.32466.17601
 
- How to run the model?
+ ## How to run the model?
 
 1) Download the code; maintaining the organization and the names of the folders and files. 
 
