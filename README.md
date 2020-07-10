@@ -1,4 +1,4 @@
-# &theta;-SIR Type Model
+# T-SIR-T
 &theta;-SIR Type Model
 
 ## Workgroup
