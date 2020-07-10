@@ -1,4 +1,4 @@
-# T-SIR Type Model
+# &theta;-SIR Type Model
 &theta;-SIR Type Model
 
 ## Workgroup
@@ -38,7 +38,7 @@ It has been originally designed and applied to simulate the dynamics of the COVI
 
  ## How to run the model?
 
-1) Download the code; maintaining the organization and the names of the folders and files. 
+1) Download the code; keeping the organization and the names of the folders and files. 
 
 2) Check that the folder "Scenarios" contains another folder with the name of the country (here, Italy). In this folder, there must be three CSV files that contain the input data:
    -  controlmeasures.csv
