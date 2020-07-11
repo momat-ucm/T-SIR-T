@@ -44,6 +44,7 @@ It has been originally designed and applied to simulate the dynamics of the COVI
    -  controlmeasures.csv
    -  disease.csv
    -  timeseries.csv
+   
    There, the user can change some input parameters about the disease and the control measures and also can update the time series with the data reported by the country authorities. 
 
 3) Double click on the Java executable jar file (here, runItaly.jar).
