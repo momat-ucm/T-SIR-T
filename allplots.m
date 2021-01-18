@@ -2,14 +2,14 @@ close all;clear all;clc;
 currentFolder = pwd;
 
 % Source REPORTED DATA:
-T=readtable(strcat(currentFolder,'\Scenarios\Italy\timeseries.csv'));
+T=readtable(strcat(currentFolder,'\Scenarios\Italy\1\timeseries.csv'));
 dates  = table2array(T(:,1));
 realcc = table2array(T(:,2));
 realcd = table2array(T(:,3));
 realHos= table2array(T(:,4));
 realQ  = table2array(T(:,5));
 realR  = table2array(T(:,6));
-Tcm=readtable(strcat(currentFolder,'\Scenarios\Italy\controlmeasures.csv'));
+Tcm=readtable(strcat(currentFolder,'\Scenarios\Italy\1\controlmeasures.csv'));
 
 % Source ESTIMATED DATA:
 basedir = strcat(currentFolder,'\Output\Italy\1');
