@@ -9,6 +9,7 @@ import java.io.PrintWriter;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
 
@@ -26,7 +27,7 @@ public class Country {
 	
 	// 1) Disease characteristics
 	int numstates = 7; // number of states involved in the model system (that cannot be decoupled)
-	//states = {S[t],E[t],I[t],Iu[t],HR[t], HD[t], Q[t]};
+	//states[t] = {S[t],E[t],I[t],Iu[t],HR[t], HD[t], Q[t]};
 	String dfile     = "disease.csv";
 	public double[] csvdur = new double[numstates-1];
 	public double csvbetai ;
@@ -36,7 +37,7 @@ public class Country {
 	public double csvp ;
 	
 	// 2) Control measures
-	int ncm = 8; // Max. number of different control measures or different levels of control measures
+	int ncm = 20; // Max. number of different control measures or different levels of control measures
 	String[] datecm   = new String[ncm]; 
 	int[] lambda      = new int[ncm];
 	String cmfile     = "controlmeasures.csv";
@@ -52,7 +53,7 @@ public class Country {
 	// repdata is formed by: 
 	// repdata[t][0] = datosic[t]; repdata[t][1] = datosid[t]; repdata[t][2] = datoH[t];    repdata[t][3] = datoQ[t];
 	// repdata[t][4] = datoR[t];   repdata[t][5] = datoHW[t];  repdata[t][6] = datoImpE[t]; repdata[t][7] = datoEvac[t]; 
-	// repdata[t][8] = datoUnD[t];
+	// repdata[t][8] = datoUnD[t]; repdata[t][9] = datoV[t];
 	String tsfile = "timeseries.csv";
 	
 	// 4) Errors
@@ -77,6 +78,21 @@ public class Country {
 	int[] tund;
 	double[] timecund;
 	double normRepDataUnD; 
+	
+	// 7) VARIANTS 
+	int nvariants = 1; //at least there is 1 variant of the virus, the reference variant
+	double[] csvk;
+	
+	// 8) VACCINES
+	int nvaccines = 0;
+	int[] initvacc;
+	String[] dateinitvacc;
+	double[][] efficacy;
+	int[][] daysefficacy;
+	int[][] nvacweek;
+	int nmaxeff = 9; // maximum number of different efficacies
+	int nmaxweeks=9; // maximum number of different rates doses/week
+	int[] days2nd;
 	
 	public Country(String iname){
 		path = currentFolder + "\\Scenarios\\" +iname+"\\";
@@ -113,6 +129,12 @@ public class Country {
 			datefin  = format.parse(datef);
 			// dmax: Number of days between datei and datef
 			dmax = Math.round(datefin.getTime()/(3600000*24)) - Math.round(dateinit.getTime()/(3600000*24))+1;
+			
+			for(int i=0;i<nvaccines;i++){
+				Date datevacc = format.parse(dateinitvacc[i]);
+				initvacc[i]   = Math.round(datevacc.getTime()/(3600000*24)) - Math.round(dateinit.getTime()/(3600000*24));
+			}
+			
 		} catch (ParseException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -224,7 +246,7 @@ public class Country {
 				}
 				if (dates[id].equals(datei)){
 	        		firstIndex = id; 
-	        		repUnD[cntund] = repdata[id][8];
+	        		repUnD[cntund] = repdata[id][7+nvariants];
 	        		Date datet;
 					try {
 						datet = format.parse(dates[id]);
@@ -235,10 +257,10 @@ public class Country {
 					}
 					cntund++;
 	        	}
-				else if (repdata[id][8]>0){
+				else if (repdata[id][7+nvariants]>0){
 					tund   = new int   [cntund+1];
 					repUnD = new double[cntund+1];
-					repUnD[cntund] = repdata[id][8];
+					repUnD[cntund] = repdata[id][7+nvariants];
 					Date datet;
 					try {
 						datet = format.parse(dates[id]);
@@ -421,6 +443,66 @@ public class Country {
 			line  = br.readLine(); 
 			vline = line.split(SEPARATOR);
 			csvp  = Double.parseDouble(vline[1]);
+			
+			// 10th line: k;input_k for variant 2;input_k for variant 3;input_k for variant 4;...;;;
+			line  = br.readLine(); 
+			if (line!=null){
+				vline = line.split(SEPARATOR);
+				csvk  = new double[vline.length-1];
+				for(int i=1; i<vline.length; i++){
+					nvariants++;
+					csvk[i-1] = Double.parseDouble(vline[i]);
+				}
+	
+				// 11th line: vaccines;nvaccines;date init Vaccine_1; ...;date init Vaccine_nvaccines;  
+				line  = br.readLine(); 
+				vline = line.split(SEPARATOR);
+				nvaccines= Integer.parseInt(vline[1]);
+				dateinitvacc = new String[nvaccines];
+				initvacc = new int[nvaccines];
+				for(int i=0;i<nvaccines; i++){
+					dateinitvacc[i] = vline[2+i];
+				}
+				
+				// 12th line: days 2nd dose; days 2nd dose vaccine 1; days 2nd dose vaccine 2; ...;
+				days2nd = new int[nvaccines];
+				line  = br.readLine(); 
+				vline = line.split(SEPARATOR);
+				for(int i=0;i<nvaccines; i++){
+					days2nd[i] = Integer.parseInt(vline[i+1]);
+				}
+				
+				// Following lines: 
+				//e_j (efficacy of Vaccine_j) ;;...;;;
+				//days e_j (days efficacy;
+				//
+				efficacy     = new double[nvaccines][nmaxeff];
+				daysefficacy = new int[nvaccines][nmaxeff];
+				nvacweek     = new int[nvaccines][nmaxweeks];
+				for(int i=0; i<nvaccines; i++){
+					line  = br.readLine(); 
+					vline = line.split(SEPARATOR);
+					for (int j=1; j<vline.length; j++){
+						efficacy[i][j-1] = Double.parseDouble(vline[j]);
+					}
+					line  = br.readLine(); 
+					vline = line.split(SEPARATOR);
+					for(int j=1; j<vline.length; j++){
+						daysefficacy[i][j-1] = Integer.parseInt(vline[j]);
+					}
+					//   nvacweek
+					line  = br.readLine(); 
+					vline = line.split(SEPARATOR);
+					for(int j=1;j<=nmaxweeks; j++){
+						if(j<vline.length){
+							nvacweek[i][j-1] = Integer.parseInt(vline[j]);
+						}
+						else{
+							nvacweek[i][j-1] = nvacweek[i][vline.length-2];
+						}
+					}
+				}
+			}
 		} 
 		catch (IOException e) {
 			e.printStackTrace();
@@ -476,8 +558,8 @@ public class Country {
 		int thistmax= Math.max(tmax, thistC);
 		int delayini=(int)(delay/dt);
 		int tsdur = (int)(tdur/dt);
-		double[][] states  = new double[tmax][numstates]; // initialize states matrix
-		//states = {S[t],E[t],I[t],Iu[t],HR[t], HD[t], Q[t]};
+		double[][][] states  = new double[tmax][numstates][nvariants]; // initialize states matrix
+		//states[t] = {S[t],E[t],I[t],Iu[t],HR[t], HD[t], Q[t]};
 		double[] H  = new double[tmax]; // initialize Hospitalized matrix (H=HR+HD)
 		double[] Q  = new double[tmax]; // initialize Quarantine matrix (Q = states[:][numstates-1])
 		double[] R  = new double[tmax]; // initialize Recovered matrix
@@ -485,14 +567,15 @@ public class Country {
 		double[] Du = new double[tmax]; // initialize Death Undetected matrix
 		double[] CC = new double[tmax]; // initialize Cumulative Cases matrix
 		double[] CD = new double[tmax]; // initialize Cumulative Deaths matrix
+		double[][] V= new double[nvaccines][tmax]; // initialize Immune Vaccinated matrix 
 		//-----------------------------------------------------------------------------------------------
 		
 		// Matrix initialization for PARAMETERS DEPENDING ON TIME ----------------------------------------
 		// multiplicamos por dos el tiempo para poder hacer RK4 en t+0.5
-		double[][] beta = new double[2*tmax+1][numstates-2]; // beta = {mbetae, mbetai, mbetaiu, mbetahr, mbetahd}
+		double[][][] beta = new double[2*tmax+1][numstates-2][nvariants];  // beta = {mbetae, mbetai, mbetaiu, mbetahr, mbetahd}
 		double[][] gamma= new double[2*thistmax+1][numstates-1]; // gamma= {gammae, gammai, gammaiu, gammahr, gammahd, gammaq}
 		double[][] cmeasures= new double[2*thistmax+1][2]; // cmeasures = {SOCIAL control measures mc(t), SANITARY control measures mcsanit(t)}
-		double[] frate   = new double[2*thistmax+1];
+		double[] frate   = new double[2*thistmax+1]; // frate=OMEGA (fatality rate)
 		double[] theta   = new double[2*tmax+1];
 		double[] p       = new double[2*tmax+1];
 		double[] omegau  = new double[2*tmax+1];//omega[2];
@@ -507,9 +590,29 @@ public class Country {
 		// ----------------------------------------------------------------------------------------------
 		
 		// STATES INITIALIZATION -------------------------------------------------------------------------------
-		states[delayini][1] = repdata[(int) Math.floor(delayini*dt)][6]; //repdata[t][6] = datoImpE[t];
-		states[delayini][0] = totalpop - states[delayini][1];
+		//states[delayini][1][0] = repdata[(int) Math.floor(delayini*dt)][6];//repdata[t][6] = datoImpE[t];
+		//states[delayini][1][0] = repdata[(int) Math.floor(delayini*dt)][6];//repdata[t][6] = datoImpE[t];
+		double sumE = 0.0;
+		for(int i=0;i<nvariants;i++){
+			states[delayini][1][i] = repdata[(int) Math.floor(delayini*dt)][6+i];//repdata[t][6] = datoImpE[t];
+			sumE = sumE + states[delayini][1][i];
+		}
+		states[delayini][0][0] = totalpop - sumE;
 		//----------------------------------------------------------------------------------------------------------
+		double[][] vaccinated = new double[nvaccines][dmax];
+		// Vaccinated
+		for (int j=0; j<nvaccines; j++){
+			if(numseries-1>8+nvariants+j){
+				vaccinated[j][(int) Math.floor(delayini*dt)] = repdata[(int) Math.floor(delayini*dt)][8+nvariants+j];
+			}
+			else{ 
+				for(int i=0;i<nvacweek[j].length;i++){
+					if((int) Math.floor(delayini*dt)>=initvacc[j]+7*i){
+						vaccinated[j][(int) Math.floor(delayini*dt)] = nvacweek[j][i]/7.0;
+					}
+				}
+			}
+		}
 		
 		// STRATEGY TO COMPUTE THETA:
 		for (double t=delayini; t<thistmax+0.5; t=t+0.5){
@@ -546,47 +649,113 @@ public class Country {
 			beta [2*t+2] = evaluateBeta(betai, coef, cmeasures[2*t+2], gamma[2*t+2], frate[2*t+2], theta[2*t+2], p[2*t+2], omegau[2*t+2], etat[2*t+2]);
 			//----------------------------------------------------------------------------------------------------------
 
-			double[] fsyseval = systemf(t, states[t], beta[2*t], gamma[2*t], frate[2*t], theta[2*t], p[2*t], omegau[2*t]);
+			double[][] fsyseval = systemf(t, states[t], beta[2*t], gamma[2*t], frate[2*t], theta[2*t], p[2*t], omegau[2*t]);
 			
 			// RUNGE KUTTA 4 etapas y orden 4 
-			double[] statesF2 = new double [numstates];
+			double[][] statesF2 = new double [numstates][nvariants];
 			for (int s=0; s<numstates; s++){
-				statesF2[s] = states[t][s] + dt/2*fsyseval[s];
+				for (int i=0; i<nvariants; i++){
+					statesF2[s][i] = states[t][s][i] + dt/2*fsyseval[s][i];
+				}
 			}
 
-			double[] fsysevalF2 = systemf(t+1/2, statesF2, beta[2*t+1], gamma[2*t+1], frate[2*t+1], theta[2*t+1], p[2*t+1], omegau[2*t+1]);
+			double[][] fsysevalF2 = systemf(t+1/2, statesF2, beta[2*t+1], gamma[2*t+1], frate[2*t+1], theta[2*t+1], p[2*t+1], omegau[2*t+1]);
 			
-			double[] statesF3 = new double [numstates];
+			double[][] statesF3 = new double [numstates][nvariants];
 			for (int s=0; s<numstates; s++){
-				statesF3[s] = states[t][s] + dt/2*fsysevalF2[s];
+				for (int i=0; i<nvariants; i++){
+					statesF3[s][i] = states[t][s][i] + dt/2*fsysevalF2[s][i];
+				}
 			}
 			  
-			double[] fsysevalF3 = systemf(t+1/2, statesF3, beta[2*t+1], gamma[2*t+1], frate[2*t+1], theta[2*t+1], p[2*t+1], omegau[2*t+1]);
+			double[][] fsysevalF3 = systemf(t+1/2, statesF3, beta[2*t+1], gamma[2*t+1], frate[2*t+1], theta[2*t+1], p[2*t+1], omegau[2*t+1]);
 			
-			double[] statesF4 = new double [numstates];
+			double[][] statesF4 = new double [numstates][nvariants];
 			for (int s=0; s<numstates; s++){
-				statesF4[s] = states[t][s] + dt*fsysevalF3[s];
+				for (int i=0; i<nvariants; i++){
+					statesF4[s][i] = states[t][s][i] + dt*fsysevalF3[s][i];
+				}
 			}
 			
-			double[] fsysevalF4 = systemf(t+1, statesF4, beta[2*t+2], gamma[2*t+2], frate[2*t+2], theta[2*t+2], p[2*t+2], omegau[2*t+2]);
+			double[][] fsysevalF4 = systemf(t+1, statesF4, beta[2*t+2], gamma[2*t+2], frate[2*t+2], theta[2*t+2], p[2*t+2], omegau[2*t+2]);
 			
 			for (int s=0; s<numstates; s++){
-				states[t+1][s] = states[t][s] + dt/6*(fsyseval[s]+2*fsysevalF2[s]+2*fsysevalF3[s]+fsysevalF4[s]);
+				for (int i=0; i<nvariants; i++){
+					states[t+1][s][i] = states[t][s][i] + dt/6*(fsyseval[s][i]+2*fsysevalF2[s][i]+2*fsysevalF3[s][i]+fsysevalF4[s][i]);
+				}
 			}
 			
-			H[t+1] = states[t+1][4] + states[t+1][5]; // 4 is HR and 5 is HD
-			Q[t+1] = states[t+1][6]; // 6 is Q
-			R[t+1] = R[t] + dt/2*(gamma[2*t][5]*Q[t] + gamma[2*t][5]*Q [t+1]);  // gammaq=gamma[5]
-			D[t+1] = D[t] + dt/2*(gamma[2*t][4]*states[t][5]+gamma[2*(t+1)][4]*states[t+1][5]); // HD = states[5]; gammahd = gamma[4]
-			Du[t+1]= Du[t]+ dt/2*(omegau[2*t]*gamma[2*t][1]*states[t][2]+omegau[2*(t+1)]*gamma[2*(t+1)][1]*states[t+1][2]); 
+			D[t+1] = D[t];
+			Du[t+1] = Du[t];
+			CC[t+1] = CC[t];
+			for (int i=0; i<nvariants; i++) {
+				H[t+1] = H[t+1] + states[t+1][4][i] + states[t+1][5][i]; // 4 is HR and 5 is HD
+				Q[t+1] = Q[t+1] + states[t+1][6][i]; // 6 is Q
+				D[t+1] = D[t+1] + dt/2*(gamma[2*t][4]*states[t][5][i]+gamma[2*(t+1)][4]*states[t+1][5][i]); // HD = states[5]; gammahd = gamma[4]
+				Du[t+1]= Du[t+1]+ dt/2*(omegau[2*t]*gamma[2*t][1]*states[t][2][i]+omegau[2*(t+1)]*gamma[2*(t+1)][1]*states[t+1][2][i]); 
+				CC[t+1]= CC[t+1]+ dt/2*(theta[2*t]*gamma[2*t][1]*states[t][2][i]+theta[2*(t+1)]*gamma[2*(t+1)][1]*states[t+1][2][i]); // I= states[2]; gammai = gamma[1]
+			}
+			R[t+1] = R[t] + dt/2*(gamma[2*t][5]*Q[t] + gamma[2*(t+1)][5]*Q[t+1]);  // gammaq=gamma[5]
+			CD[t+1]= D[t+1];
 			
-			CC[t+1]= CC[t]+ dt/2*(theta[2*t]*gamma[2*t][1]*states[t][2]+theta[2*(t+1)]*gamma[2*(t+1)][1]*states[t+1][2]); // I= states[2]; gammai = gamma[1]
-			CD[t+1]= D[t+1]; 
 			
 			if(((t+1)%(1/dt)==0)&&((t+1)*dt<NhistC)) {
-				states[t+1][1]=states[t+1][1]+repdata[(int) Math.floor((t+1)*dt)][6]; //repdata[t][6] = datoImpE[t];
-				states[t+1][4]=states[t+1][4]-repdata[(int) Math.floor((t+1)*dt)][7]; //repdata[t][7] = datoEvac[t];
+				for(int i=0; i<nvariants; i++){
+					states[t+1][1][i]=states[t+1][1][i]+repdata[(int) Math.floor((t+1)*dt)][6+i]; //repdata[t][6] = datoImpE[t];
+				}
+				states[t+1][4][0]=states[t+1][4][0]-repdata[(int) Math.floor((t+1)*dt)][6+nvariants]; //repdata[t][7] = datoEvac[t];
+				
+				for (int j=0;j<nvaccines;j++){
+					if(numseries-1>8+nvariants+j){
+						vaccinated[j][(int) Math.floor((t+1)*dt)] = repdata[(int) Math.floor((t+1)*dt)][8+nvariants+j];
+					}
+					else{ 
+						for(int i=0;i<nvacweek[j].length;i++){
+							if((int) Math.floor((t+1)*dt)>=initvacc[j]+7*i){
+								if((int) Math.floor((t+1)*dt)<initvacc[j]+days2nd[j]){
+									vaccinated[j][(int) Math.floor((t+1)*dt)] = nvacweek[j][i]/7.0;
+								}
+								else if((i<2)||(nvacweek[j][i]>=nvacweek[j][i-2])||((int) Math.floor((t+1)*dt)>=initvacc[j]+7*nvacweek[j].length)){
+									vaccinated[j][(int) Math.floor((t+1)*dt)] = Math.max((nvacweek[j][i]/7.0)-vaccinated[j][(int) Math.floor((t+1)*dt)-days2nd[j]],0.0);
+								}
+								else{
+									vaccinated[j][(int) Math.floor((t+1)*dt)] = Math.max((nvacweek[j][i]/7.0)-(vaccinated[j][(int) Math.floor((t+1)*dt)-(days2nd[j]-14)]-(nvacweek[j][i]/7.0))-vaccinated[j][(int) Math.floor((t+1)*dt)-days2nd[j]],0.0);
+								}
+							}
+						}
+					}
+				}
 			}
+			else if((t+1)%(1/dt)==0){
+				for (int j=0; j<nvaccines; j++){
+					for(int i=0;i<nvacweek[j].length;i++){
+						if((int) Math.floor((t+1)*dt)>=initvacc[j]+7*i){
+							if((int) Math.floor((t+1)*dt)<initvacc[j]+days2nd[j]){
+								vaccinated[j][(int) Math.floor((t+1)*dt)] = nvacweek[j][i]/7.0;
+							}
+							else if((i<2)||(nvacweek[j][i]>=nvacweek[j][i-2])||((int) Math.floor((t+1)*dt)>=initvacc[j]+7*nvacweek[j].length)){
+								vaccinated[j][(int) Math.floor((t+1)*dt)] = Math.max((nvacweek[j][i]/7.0)-vaccinated[j][(int) Math.floor((t+1)*dt)-days2nd[j]],0.0);
+							}
+							else{
+								vaccinated[j][(int) Math.floor((t+1)*dt)] = Math.max((nvacweek[j][i]/7.0)-(vaccinated[j][(int) Math.floor((t+1)*dt)-(days2nd[j]-14)]-(nvacweek[j][i]/7.0))-vaccinated[j][(int) Math.floor((t+1)*dt)-days2nd[j]],0.0);
+							}
+						}
+					}
+				}
+			}
+			
+			// Vaccinated
+			for (int j=0; j<nvaccines; j++){
+				double vj = 0;
+				for(int k=1; k<efficacy[j].length;k++){
+					if(((t+1)%(1/dt)==0)&&(((int) Math.floor((t+1)*dt))>=daysefficacy[j][k])&&(efficacy[j][k]>0)){
+						vj = vj + (efficacy[j][k]-efficacy[j][k-1])*vaccinated[j][(int) Math.floor((t+1)*dt)-daysefficacy[j][k]];
+					}
+				}
+				states[t+1][0][0] = states[t+1][0][0] - vj;
+				V[j][t+1] = V[j][t] + vj;
+			}
+
 			//---------------------------------------------------------------------------------------------------
 			
 		}
@@ -623,45 +792,24 @@ public class Country {
 	}
 	
 	public double[][] evaluateControlMeasures(double[][] cmeas, double tstep, double[] kappasocial, double[] msocial, double[] kappasanit, double[] msanit){
-		double socialcm = 1.0; 
+		double socialcm = 1.0;
 		double sanitcm  = 1.0;
 		
-		if (tstep<=lambda[1]){
+		int k = ncm-1;
+		
+		for(int i=1;i<ncm-1; i++){
+			if (tstep<=lambda[i]){
+				k = i;
+				break;
+			}
+		}
+		
+		if (k==1){
 			socialcm = (msocial[0]-msocial[1])*Math.exp(-kappasocial[1]*(tstep-lambda[0])*dt)+msocial[1];
 			sanitcm  = (msanit [0]-msanit [1])*Math.exp(-kappasanit [1]*(tstep-lambda[0])*dt)+msanit [1];
 		}
-		else if (tstep<=lambda[2]){
-			socialcm = (cmeas[(int)(2*lambda[1])][0]-msocial[2])*Math.exp(-kappasocial[2]*(tstep-lambda[1])*dt)+msocial[2];
-			sanitcm  = (cmeas[(int)(2*lambda[1])][1]-msanit [2])*Math.exp(-kappasanit [2]*(tstep-lambda[1])*dt)+msanit [2];
-		}
-		else if (tstep<=lambda[3]){
-			socialcm = (cmeas[(int)(2*lambda[2])][0]-msocial[3])*Math.exp(-kappasocial[3]*(tstep-lambda[2])*dt)+msocial[3];
-			// sanitcm no cambia (idem que trozo anterior)
-			sanitcm  = (cmeas[(int)(2*lambda[1])][1]-msanit [2])*Math.exp(-kappasanit [2]*(tstep-lambda[1])*dt)+msanit [2];
-		}
-		else if (tstep<=lambda[4]){
-			socialcm = (cmeas[(int)(2*lambda[3])][0]-msocial[4])*Math.exp(-kappasocial[4]*(tstep-lambda[3])*dt)+msocial[4];
-			// sanitcm no cambia (idem que trozo anterior)
-			sanitcm  = (cmeas[(int)(2*lambda[1])][1]-msanit [2])*Math.exp(-kappasanit [2]*(tstep-lambda[1])*dt)+msanit [2];
-		}
-		else if (tstep<=lambda[5]){
-			socialcm = (cmeas[(int)(2*lambda[4])][0]-msocial[5])*Math.exp(-kappasocial[5]*(tstep-lambda[4])*dt)+msocial[5];
-			// sanitcm no cambia (idem que trozo anterior)
-			sanitcm  = (cmeas[(int)(2*lambda[1])][1]-msanit [2])*Math.exp(-kappasanit [2]*(tstep-lambda[1])*dt)+msanit [2];
-		}
-		else if (tstep<=lambda[6]){
-			socialcm = (cmeas[(int)(2*lambda[5])][0]-msocial[6])*Math.exp(-kappasocial[6]*(tstep-lambda[5])*dt)+msocial[6];
-			// sanitcm no cambia (idem que trozo anterior)
-			sanitcm  = (cmeas[(int)(2*lambda[1])][1]-msanit [2])*Math.exp(-kappasanit [2]*(tstep-lambda[1])*dt)+msanit [2];
-		}
-		else if (tstep<=lambda[7]){
-			socialcm = (cmeas[(int)(2*lambda[6])][0]-msocial[7])*Math.exp(-kappasocial[7]*(tstep-lambda[6])*dt)+msocial[7];
-			// sanitcm no cambia (idem que trozo anterior)
-			sanitcm  = (cmeas[(int)(2*lambda[1])][1]-msanit [2])*Math.exp(-kappasanit [2]*(tstep-lambda[1])*dt)+msanit [2];
-		}
 		else {
-			socialcm = (cmeas[(int)(2*lambda[7])][0]-msocial[8])*Math.exp(-kappasocial[8]*(tstep-lambda[7])*dt)+msocial[8];
-			// sanitcm no cambia (idem que trozo anterior)
+			socialcm = (cmeas[(int)(2*lambda[k-1])][0]-msocial[k])*Math.exp(-kappasocial[k]*(tstep-lambda[k-1])*dt)+msocial[k];
 			sanitcm  = (cmeas[(int)(2*lambda[1])][1]-msanit [2])*Math.exp(-kappasanit [2]*(tstep-lambda[1])*dt)+msanit [2];
 		}
 		
@@ -692,19 +840,33 @@ public class Country {
 		
 	}
 	
-	public double[] evaluateBeta(double betai0, double[] coef, double[] cmeas, double[] cgamma, double cfrate, double ctheta, double p, double wu, double ieta){
-		double mbetae  = cmeas[0]*coef[0]*betai0;
+	public double[][] evaluateBeta(double betai0, double[] coef, double[] cmeas, double[] cgamma, double cfrate, double ctheta, double p, double wu, double ieta){
 		
-		double mbetai  = cmeas[0]*betai0;
+		double[] mbetae = new double[nvariants];
+		double[] mbetai = new double[nvariants];
+		double[] mbetaiu = new double[nvariants];
+		double[] mbetahr = new double[nvariants];
+		double[] mbetahd = new double[nvariants];
+		
+		mbetae[0]  = cmeas[0]*coef[0]*betai0;
+		
+		mbetai[0]  = cmeas[0]*betai0;
 		
 		double betainf = coef[1] * betai0;
 		double betaiu  = betainf + ((betai0-betainf)/(1-cfrate))*(1-ctheta);
-		double mbetaiu = cmeas[0]*betaiu;
+		mbetaiu[0] = cmeas[0]*betaiu;
 		
-		double mbetahr = (ieta*((mbetai/cgamma[1]) + (mbetae/cgamma[0])+ (1-ctheta-wu)*(mbetaiu/cgamma[2])))/((1-ieta)*((p*(ctheta-cfrate)/cgamma[3])+cfrate/cgamma[4]));
-		double mbetahd = mbetahr;
+		mbetahr[0] = (ieta*((mbetai[0]/cgamma[1]) + (mbetae[0]/cgamma[0])+ (1-ctheta-wu)*(mbetaiu[0]/cgamma[2])))/((1-ieta)*((p*(ctheta-cfrate)/cgamma[3])+cfrate/cgamma[4]));
+		mbetahd[0] = mbetahr[0];
+		for(int i=1; i<nvariants; i++) {
+			mbetae[i] = (1+csvk[i-1])*mbetae[0];
+			mbetai[i] = (1+csvk[i-1])*mbetai[0];
+			mbetaiu[i]= (1+csvk[i-1])*mbetaiu[0];
+			mbetahr[i]= (1+csvk[i-1])*mbetahr[0];
+			mbetahd[i]= (1+csvk[i-1])*mbetahd[0];
+		}
 		
-		double[] currentbeta = {mbetae, mbetai, mbetaiu, mbetahr, mbetahd};
+		double[][] currentbeta = {mbetae, mbetai, mbetaiu, mbetahr, mbetahd};
 		
 		return currentbeta;
 	}
@@ -727,7 +889,8 @@ public class Country {
 
 		int countz = 0;
 		for (int d=firstindex; d+delay<NhistC; d++){
-			if ((repdata[d+delay][5]!=0)&&(repdata[d+delay][0]!=crold)){
+			//if ((repdata[d+delay][5]!=0)&&(repdata[d+delay][0]!=crold)){
+			if ((repdata[d+delay][5]!=0)&&(repdata[d+delay][0]!=crold)&&(repdata[d+delay][5]-hrold<repdata[d+delay][0]-crold)){
 				eta[d] =(repdata[d+delay][5]-hrold)/(repdata[d+delay][0]-crold);
 				hrold  = repdata[d+delay][5];
 				crold  = repdata[d+delay][0];
@@ -793,7 +956,7 @@ public class Country {
 
 		int countz = 0;
 		for (int d=firstindex+1; d+1/gamma[(int) (2*(d/dt))][4]<NhistC; d++){
-			if ((repdata[d][0]!=crold)){
+			if ((repdata[d][0]!=crold)){//>
 				icfr[d] =(repdata[(int) (d+1/gamma[(int) (2*(d/dt))][4])][1]-drold)/(repdata[d][0]-crold);
 				drold   = repdata[(int) (d+1/gamma[(int) (2*(d/dt))][4])][1];
 				crold   = repdata[d][0];
@@ -831,9 +994,11 @@ public class Country {
 	
 	public double evaluateTheta(int tfor, double tstep, double[] fr, double[] cfr){
 		double ctheta; 
+		
+		double inith = Math.max(cfr[NhistC]+6, lambda[1]*dt);
 
-		if(tstep<=(cfr[NhistC]+6)/dt){     // tthetaini = cfr[NhistC]+6
-			ctheta = fr[2*(int) (Math.floor((cfr[NhistC]+6)/dt))]/cfr[(int)(cfr[NhistC]+6)];
+		if(tstep<=inith/dt){     // (cfr[NhistC]+6)tthetaini = cfr[NhistC]+6 //(cfr[NhistC]+6)cfr[NhistC]+6
+			ctheta = fr[2*(int) (Math.floor(inith/dt))]/cfr[(int)(inith)];
 		}
 		else if (tstep<=cfr[NhistC+1]/dt){ // tthetafin = cfr[NhistC+1]
 			ctheta = fr[2*(int) (Math.floor((tfor)*dt)/dt)]/cfr[(int) Math.floor((tfor)*dt)] + (fr[2*(int) ((Math.floor((tfor)*dt)+1)/dt)]/cfr[(int) Math.floor((tfor)*dt)+1]-fr[2*(int) (Math.floor((tfor)*dt)/dt)]/cfr[(int) Math.floor((tfor)*dt)])*(tstep-((int) Math.floor((tfor)*dt))/dt)/(1/(dt)); 
@@ -872,20 +1037,20 @@ public class Country {
 		return wu;
 	}
 	
-	public double[] systemf(double tstep, double[] SEIIuHRHDQ, double[] beta, double[] gamma, double fatrate, double theta, double p, double omegau){
-		double S = SEIIuHRHDQ[0];
-		double E = SEIIuHRHDQ[1];
-		double I = SEIIuHRHDQ[2];
-		double Iu= SEIIuHRHDQ[3];
-		double HR= SEIIuHRHDQ[4];
-		double HD= SEIIuHRHDQ[5];
-		double Q = SEIIuHRHDQ[6];
+	public double[][] systemf(double tstep, double[][] SEIIuHRHDQ, double[][] beta, double[] gamma, double fatrate, double theta, double p, double omegau){
+		double[] S = SEIIuHRHDQ[0];
+		double[] E = SEIIuHRHDQ[1];
+		double[] I = SEIIuHRHDQ[2];
+		double[] Iu= SEIIuHRHDQ[3];
+		double[] HR= SEIIuHRHDQ[4];
+		double[] HD= SEIIuHRHDQ[5];
+		double[] Q = SEIIuHRHDQ[6];
 		
-		double mbetae = beta[0];
-		double mbetai = beta[1];
-		double mbetaiu= beta[2];
-		double mbetahr= beta[3];
-		double mbetahd= beta[4];
+		double[] mbetae = beta[0];
+		double[] mbetai = beta[1];
+		double[] mbetaiu= beta[2];
+		double[] mbetahr= beta[3];
+		double[] mbetahd= beta[4];
 		
 		double gammae = gamma[0];
 		double gammai = gamma[1];
@@ -895,23 +1060,35 @@ public class Country {
 		double gammaq = gamma[5];
 		
 		// Flujos new
-		double newe = S*(mbetae*E + mbetai*I + mbetaiu*Iu + mbetahr*HR + mbetahd*HD)/totalpop;
-		double newi = gammae * E; 
-		double newhid = gammai  * I;
-		double newhiu = gammaiu * Iu;
-		double newr = gammahr * HR;
-		double newd2= gammahd * HD;
-		double newq = gammaq  * Q; 
+		double[] fS = new double[nvariants];
+		double[] fE = new double[nvariants];
+		double[] fI = new double[nvariants];
+		double[] fIu = new double[nvariants];
+		double[] fHR = new double[nvariants];
+		double[] fHD = new double[nvariants];
+		double[] fQ = new double[nvariants];
+		double neweS = 0.0;
+		for (int i=0; i<nvariants; i++){
+			double newe = S[0]*(mbetae[i]*E[i] + mbetai[i]*I[i] + mbetaiu[i]*Iu[i] + mbetahr[i]*HR[i] + mbetahd[i]*HD[i])/totalpop;
+			double newi = gammae * E[i]; 
+			double newhid = gammai  * I[i];
+			double newhiu = gammaiu * Iu[i];
+			double newr = gammahr * HR[i];
+			double newd= gammahd * HD[i]; 
+			double newq = gammaq  * Q[i];
+			
+			neweS = neweS + newe;
+			fE[i] = newe-newi;
+			fI[i] = newi - newhid; 
+			fIu[i]= (1-theta-omegau)*newhid - newhiu; 
+			fHR[i]= p*(theta-fatrate)*newhid - newr;
+			fHD[i]= fatrate *newhid - newd ;
+			fQ[i] = (1-p)*(theta-fatrate)*newhid + newr - newq;
+		}
         
-		double fS =  - newe ; 		
-		double fE = newe - newi ;	
-		double fI = newi - newhid; 
-		double fIu= (1-theta-omegau)*newhid - newhiu; 
-		double fHR= p*(theta-fatrate)*newhid - newr  ;
-		double fHD=          fatrate *newhid - newd2 ;
-		double fQ = (1-p)*(theta-fatrate)*newhid + newr - newq;
+		fS[0] =  - neweS; 
 		
-		double[] fSEIIuHRHDQ = {fS, fE, fI, fIu, fHR, fHD, fQ};
+		double[][] fSEIIuHRHDQ = {fS, fE, fI, fIu, fHR, fHD, fQ};
 		
 		return fSEIIuHRHDQ;
 	}
@@ -936,7 +1113,7 @@ public class Country {
 		int thistmax= Math.max(tmax, thistC);
 		int delayini=(int)(delay/dt);
 		int tsdur = (int)(tdur/dt);
-		double[][] states  = new double[tmax][numstates]; // initialize states matrix
+		double[][][] states  = new double[tmax][numstates][nvariants]; // initialize states matrix
 		//states = {S[t],E[t],I[t],Iu[t],HR[t], HD[t], Q[t]};
 		double[] H  = new double[tmax]; // initialize Hospitalized matrix (H=HR+HD)
 		double[] Q  = new double[tmax]; // initialize Quarantine matrix (Q = states[:][numstates-1])
@@ -945,11 +1122,12 @@ public class Country {
 		double[] Du = new double[tmax]; // initialize Death Undetected matrix
 		double[] CC = new double[tmax]; // initialize Cumulative Cases matrix
 		double[] CD = new double[tmax]; // initialize Cumulative Deaths matrix
+		double[][] V= new double[nvaccines][tmax]; // initialize Immune Vaccinated matrix 
 		//-----------------------------------------------------------------------------------------------
 		
 		// Matrix initialization for PARAMETERS DEPENDING ON TIME ----------------------------------------
 		// multiplicamos por dos el tiempo para poder hacer RK4 en t+0.5
-		double[][] beta = new double[2*tmax+1][numstates-2]; // beta = {mbetae, mbetai, mbetaiu, mbetahr, mbetahd}
+		double[][][] beta = new double[2*tmax+1][numstates-2][nvariants];  // beta = {mbetae, mbetai, mbetaiu, mbetahr, mbetahd}
 		double[][] gamma= new double[2*thistmax+1][numstates-1]; // gamma= {gammae, gammai, gammaiu, gammahr, gammahd, gammaq}
 		double[][] cmeasures= new double[2*thistmax+1][2]; // cmeasures = {SOCIAL control measures mc(t), SANITARY control measures mcsanit(t)}
 		double[] frate   = new double[2*thistmax+1];
@@ -967,42 +1145,67 @@ public class Country {
 		// ----------------------------------------------------------------------------------------------
 		
 		// STATES INITIALIZATION -------------------------------------------------------------------------------
-		states[delayini][1] = repdata[(int) Math.floor(delayini*dt)][6]; //repdata[t][6] = datoImpE[t];
-		states[delayini][0] = totalpop - states[delayini][1];
+		double sumE = 0.0;
+		for(int i=0;i<nvariants;i++){
+			states[delayini][1][i] = repdata[(int) Math.floor(delayini*dt)][6+i];//repdata[t][6] = datoImpE[t];
+			sumE = sumE + states[delayini][1][i];
+		}
+		states[delayini][0][0] = totalpop - sumE;
 		//----------------------------------------------------------------------------------------------------------
+		double[][] vaccinated = new double[nvaccines][dmax];
+		// Vaccinated
+		for (int j=0; j<nvaccines; j++){
+			if(numseries-1>8+nvariants+j){
+				vaccinated[j][(int) Math.floor(delayini*dt)] = repdata[(int) Math.floor(delayini*dt)][8+nvariants+j];
+			}
+			else{ 
+				for(int i=0;i<nvacweek[j].length;i++){
+					if((int) Math.floor(delayini*dt)>=initvacc[j]+7*i){
+						vaccinated[j][(int) Math.floor(delayini*dt)] = nvacweek[j][i]/7.0;
+					}
+				}
+			}
+		}
 		
 		// POSTPROCESSING -------------------------------------------------------------------------------
-		double[] CCtotal = new double[tmax];
-		double[] CCu     = new double[tmax];
-		double[] causeE  = new double[tmax];
-		double[] causeI  = new double[tmax]; // initialize causei matrix
-		double[] causeIu = new double[tmax]; // initialize causeiu matrix
-		double[] causeH  = new double[tmax]; // initialize causeh matrix
-		double[] CHos    = new double[tmax];
-		double[] CCuei   = new double[tmax];
-		double[] CCtuei  = new double[tmax];
-		double[] altasHos= new double[tmax];
-		double[] newE    = new double[tmax];
-		double[] newH    = new double[tmax];
-		double[] newCases= new double[tmax];
-		double[] newDeaths=new double[tmax];
-		double[] betainE = new double[tmax];
-		double[] betainI = new double[tmax];
-		double[] betainIu = new double[tmax];
-		double[] betainHR = new double[tmax];
-		double[] betainHD = new double[tmax];
-		double[] S = new double[tmax];
-		double[] E = new double[tmax];
-		double[] I = new double[tmax];
-		double[] Iu= new double[tmax];
-		double[] HR= new double[tmax];
-		double[] HD= new double[tmax];
+		double[][] CCtotal  = new double[tmax][nvariants];
+		double[][] CCu      = new double[tmax][nvariants];
+		double[][] causeE   = new double[tmax][nvariants];
+		double[][] causeI   = new double[tmax][nvariants]; // initialize causei matrix
+		double[][] causeIu  = new double[tmax][nvariants]; // initialize causeiu matrix
+		double[][] causeH   = new double[tmax][nvariants]; // initialize causeh matrix
+		double[][] CHos     = new double[tmax][nvariants];
+		double[][] CCuei    = new double[tmax][nvariants];
+		double[][] CCtuei   = new double[tmax][nvariants];
+		double[][] altasHos = new double[tmax][nvariants];
+		double[][] newE     = new double[tmax][nvariants];
+		double[][] newH     = new double[tmax][nvariants];
+		double[][] newCases = new double[tmax][nvariants];
+		double[][] newDeaths= new double[tmax][nvariants];
+		double[][] betainE  = new double[tmax][nvariants];
+		double[][] betainI  = new double[tmax][nvariants];
+		double[][] betainIu = new double[tmax][nvariants];
+		double[][] betainHR = new double[tmax][nvariants];
+		double[][] betainHD = new double[tmax][nvariants];
+		double[][] S = new double[tmax][nvariants];
+		double[][] E = new double[tmax][nvariants];
+		double[][] I = new double[tmax][nvariants];
+		double[][] Iu= new double[tmax][nvariants];
+		double[][] HR= new double[tmax][nvariants];
+		double[][] HD= new double[tmax][nvariants];
+		double[][] Qv= new double[tmax][nvariants]; // Q separated for the different variants
+		double[][] Rv= new double[tmax][nvariants];
+		double[][] Dv= new double[tmax][nvariants];
+		double[][] Duv=new double[tmax][nvariants];
+		double[][] CCv=new double[tmax][nvariants];
+		double[][] CDv=new double[tmax][nvariants];
 		S[delayini] = states[delayini][0]; 
 		E[delayini] = states[delayini][1]; 
 		I[delayini] = states[delayini][2];
 		Iu[delayini]= states[delayini][3]; 
 		HR[delayini]= states[delayini][4];
 		HD[delayini]= states[delayini][5];
+		Qv[delayini]= states[delayini][6]; 
 		int timestop = tmax;
 		//-----------------------------------------------------------------------------------------------
 		
@@ -1041,47 +1244,115 @@ public class Country {
 			beta [2*t+2] = evaluateBeta(betai, coef, cmeasures[2*t+2], gamma[2*t+2], frate[2*t+2], theta[2*t+2], p[2*t+2], omegau[2*t+2], etat[2*t+2]);
 			//----------------------------------------------------------------------------------------------------------
 
-			double[] fsyseval = systemf(t, states[t], beta[2*t], gamma[2*t], frate[2*t], theta[2*t], p[2*t], omegau[2*t]);
+			double[][] fsyseval = systemf(t, states[t], beta[2*t], gamma[2*t], frate[2*t], theta[2*t], p[2*t], omegau[2*t]);
 			
 			// RUNGE KUTTA 4 etapas y orden 4 
-			double[] statesF2 = new double [numstates];
+			double[][] statesF2 = new double [numstates][nvariants];
+			
 			for (int s=0; s<numstates; s++){
-				statesF2[s] = states[t][s] + dt/2*fsyseval[s];
+				for (int i=0; i<nvariants; i++){
+					statesF2[s][i] = states[t][s][i] + dt/2*fsyseval[s][i];
+				}
 			}
 
-			double[] fsysevalF2 = systemf(t+1/2, statesF2, beta[2*t+1], gamma[2*t+1], frate[2*t+1], theta[2*t+1], p[2*t+1], omegau[2*t+1]);
+			double[][] fsysevalF2 = systemf(t+1/2, statesF2, beta[2*t+1], gamma[2*t+1], frate[2*t+1], theta[2*t+1], p[2*t+1], omegau[2*t+1]);
 			
-			double[] statesF3 = new double [numstates];
+			double[][] statesF3 = new double [numstates][nvariants];
 			for (int s=0; s<numstates; s++){
-				statesF3[s] = states[t][s] + dt/2*fsysevalF2[s];
+				for (int i=0; i<nvariants; i++){
+					statesF3[s][i] = states[t][s][i] + dt/2*fsysevalF2[s][i];
+				}
 			}
 			  
-			double[] fsysevalF3 = systemf(t+1/2, statesF3, beta[2*t+1], gamma[2*t+1], frate[2*t+1], theta[2*t+1], p[2*t+1], omegau[2*t+1]);
+			double[][] fsysevalF3 = systemf(t+1/2, statesF3, beta[2*t+1], gamma[2*t+1], frate[2*t+1], theta[2*t+1], p[2*t+1], omegau[2*t+1]);
 			
-			double[] statesF4 = new double [numstates];
+			double[][] statesF4 = new double [numstates][nvariants];
 			for (int s=0; s<numstates; s++){
-				statesF4[s] = states[t][s] + dt*fsysevalF3[s];
+				for (int i=0; i<nvariants; i++){
+					statesF4[s][i] = states[t][s][i] + dt*fsysevalF3[s][i];
+				}
 			}
 			
-			double[] fsysevalF4 = systemf(t+1, statesF4, beta[2*t+2], gamma[2*t+2], frate[2*t+2], theta[2*t+2], p[2*t+2], omegau[2*t+2]);
+			double[][] fsysevalF4 = systemf(t+1, statesF4, beta[2*t+2], gamma[2*t+2], frate[2*t+2], theta[2*t+2], p[2*t+2], omegau[2*t+2]);
 			
 			for (int s=0; s<numstates; s++){
-				states[t+1][s] = states[t][s] + dt/6*(fsyseval[s]+2*fsysevalF2[s]+2*fsysevalF3[s]+fsysevalF4[s]);
+				for (int i=0; i<nvariants; i++){
+					states[t+1][s][i] = states[t][s][i] + dt/6*(fsyseval[s][i]+2*fsysevalF2[s][i]+2*fsysevalF3[s][i]+fsysevalF4[s][i]);
+				}
 			}
 			
-			H[t+1] = states[t+1][4] + states[t+1][5]; // 4 is HR and 5 is HD
-			Q[t+1] = states[t+1][6]; // 6 is Q
-			R[t+1] = R[t] + dt/2*(gamma[2*t][5]*Q[t] + gamma[2*t][5]*Q [t+1]);  // gammaq=gamma[5]
-			D[t+1] = D[t] + dt/2*(gamma[2*t][4]*states[t][5]+gamma[2*(t+1)][4]*states[t+1][5]); // HD = states[5]; gammahd = gamma[4]
-			Du[t+1]= Du[t]+ dt/2*(omegau[2*t]*gamma[2*t][1]*states[t][2]+omegau[2*(t+1)]*gamma[2*(t+1)][1]*states[t+1][2]); 
+			D[t+1] = D[t];
+			Du[t+1] = Du[t];
+			CC[t+1] = CC[t];
+			for (int i=0; i<nvariants; i++) {
+				H[t+1] = H[t+1] + states[t+1][4][i] + states[t+1][5][i]; // 4 is HR and 5 is HD
+				Q[t+1] = Q[t+1] + states[t+1][6][i]; // 6 is Q
+				D[t+1] = D[t+1] + dt/2*(gamma[2*t][4]*states[t][5][i]+gamma[2*(t+1)][4]*states[t+1][5][i]); // HD = states[5]; gammahd = gamma[4]
+				Du[t+1]= Du[t+1]+ dt/2*(omegau[2*t]*gamma[2*t][1]*states[t][2][i]+omegau[2*(t+1)]*gamma[2*(t+1)][1]*states[t+1][2][i]); 
+				CC[t+1]= CC[t+1]+ dt/2*(theta[2*t]*gamma[2*t][1]*states[t][2][i]+theta[2*(t+1)]*gamma[2*(t+1)][1]*states[t+1][2][i]); // I= states[2]; gammai = gamma[1]
+			}
+			R[t+1] = R[t] + dt/2*(gamma[2*t][5]*Q[t] + gamma[2*(t+1)][5]*Q[t+1]);  // gammaq=gamma[5]
+			CD[t+1]= D[t+1];
 			
-			CC[t+1]= CC[t]+ dt/2*(theta[2*t]*gamma[2*t][1]*states[t][2]+theta[2*(t+1)]*gamma[2*(t+1)][1]*states[t+1][2]); // I= states[2]; gammai = gamma[1]
-			CD[t+1]= D[t+1]; 
 			
 			if(((t+1)%(1/dt)==0)&&((t+1)*dt<NhistC)) {
-				states[t+1][1]=states[t+1][1]+repdata[(int) Math.floor((t+1)*dt)][6]; //repdata[t][6] = datoImpE[t];
-				states[t+1][4]=states[t+1][4]-repdata[(int) Math.floor((t+1)*dt)][7]; //repdata[t][7] = datoEvac[t];
+				for(int i=0; i<nvariants; i++){
+					states[t+1][1][i]=states[t+1][1][i]+repdata[(int) Math.floor((t+1)*dt)][6+i]; //repdata[t][6] = datoImpE[t];
+				}
+				states[t+1][4][0]=states[t+1][4][0]-repdata[(int) Math.floor((t+1)*dt)][6+nvariants]; //repdata[t][7] = datoEvac[t];
+				
+				for (int j=0;j<nvaccines;j++){
+					if(numseries-1>8+nvariants+j){
+						vaccinated[j][(int) Math.floor((t+1)*dt)] = repdata[(int) Math.floor((t+1)*dt)][8+nvariants+j];
+					}
+					else{ 
+						for(int i=0;i<nvacweek[j].length;i++){
+							if((int) Math.floor((t+1)*dt)>=initvacc[j]+7*i){
+								if((int) Math.floor((t+1)*dt)<initvacc[j]+days2nd[j]){
+									vaccinated[j][(int) Math.floor((t+1)*dt)] = nvacweek[j][i]/7.0;
+								}
+								else if((i<2)||(nvacweek[j][i]>=nvacweek[j][i-2])||((int) Math.floor((t+1)*dt)>=initvacc[j]+7*nvacweek[j].length)){
+									vaccinated[j][(int) Math.floor((t+1)*dt)] = Math.max((nvacweek[j][i]/7.0)-vaccinated[j][(int) Math.floor((t+1)*dt)-days2nd[j]],0.0);
+								}
+								else{
+									vaccinated[j][(int) Math.floor((t+1)*dt)] = Math.max((nvacweek[j][i]/7.0)-(vaccinated[j][(int) Math.floor((t+1)*dt)-(days2nd[j]-14)]-(nvacweek[j][i]/7.0))-vaccinated[j][(int) Math.floor((t+1)*dt)-days2nd[j]],0.0);
+								}
+							}
+						}
+					}
+				}
 			}
+			else if((t+1)%(1/dt)==0){
+				for (int j=0; j<nvaccines; j++){
+					for(int i=0;i<nvacweek[j].length;i++){
+						if((int) Math.floor((t+1)*dt)>=initvacc[j]+7*i){
+							if((int) Math.floor((t+1)*dt)<initvacc[j]+days2nd[j]){
+								vaccinated[j][(int) Math.floor((t+1)*dt)] = nvacweek[j][i]/7.0;
+							}
+							else if((i<2)||(nvacweek[j][i]>=nvacweek[j][i-2])||((int) Math.floor((t+1)*dt)>=initvacc[j]+7*nvacweek[j].length)){
+								vaccinated[j][(int) Math.floor((t+1)*dt)] = Math.max((nvacweek[j][i]/7.0)-vaccinated[j][(int) Math.floor((t+1)*dt)-days2nd[j]],0.0);
+							}
+							else{
+								vaccinated[j][(int) Math.floor((t+1)*dt)] = Math.max((nvacweek[j][i]/7.0)-(vaccinated[j][(int) Math.floor((t+1)*dt)-(days2nd[j]-14)]-(nvacweek[j][i]/7.0))-vaccinated[j][(int) Math.floor((t+1)*dt)-days2nd[j]],0.0);
+							}
+						}
+					}
+				}
+			}
+			
+			// Vaccinated
+			for (int j=0; j<nvaccines; j++){
+				double vj = 0;
+				for(int k=1; k<efficacy[j].length;k++){
+					if(((t+1)%(1/dt)==0)&&(((int) Math.floor((t+1)*dt))>=daysefficacy[j][k])&&(efficacy[j][k]>0)){
+						vj = vj + (efficacy[j][k]-efficacy[j][k-1])*vaccinated[j][(int) Math.floor((t+1)*dt)-daysefficacy[j][k]];
+					}
+				}
+				states[t+1][0][0] = states[t+1][0][0] - vj;
+				V[j][t+1] = V[j][t] + vj; 
+			}
+			
+
 			//---------------------------------------------------------------------------------------------------
 			
 			// POSTPROCESSING -----------------------------------------------------------------------------------
@@ -1091,30 +1362,47 @@ public class Country {
 			Iu[t+1]= states[t+1][3];
 			HR[t+1]= states[t+1][4];
 			HD[t+1]= states[t+1][5];
+			Qv[t+1]= states[t+1][6]; // Q separated for the different variants
 			
-			CCtotal[t+1] = CCtotal[t]+ dt/2*(gamma[2*t][1]*I[t]+gamma[2*(t+1)][1]*I[t+1]);
-			causeE[t+1]  = causeE[t] + dt/2*(beta[2*t][0]*E[t]*S[t]+beta[2*(t+1)][0]*E[t+1]*S[t+1])/totalpop;
-			causeI[t+1]  = causeI[t] + dt/2*(beta[2*t][1]*I[t]*S[t]+beta[2*(t+1)][1]*I[t+1]*S[t+1])/totalpop;
-			causeIu[t+1] = causeIu[t]+ dt/2*(beta[2*t][2]*Iu[t]*S[t]+beta[2*(t+1)][2]*Iu[t+1]*S[t+1])/totalpop;
-			causeH[t+1]  = causeH[t] + dt/2*(beta[2*t][3]*H[t]*S[t]+beta[2*(t+1)][3]*H[t+1]*S[t+1])/totalpop;
-			altasHos[t+1]= altasHos[t]+dt/2*(gamma[2*t][3]*HR[t] + gamma[2*(t+1)][3]*HR[t+1]);
-			CHos[t+1]    = CHos[t] + dt/2*((p[2*t]*theta[2*t]+(1-p[2*t])*frate[2*t])*gamma[2*t][1]*I[t]+(p[2*(t+1)]*theta[2*(t+1)]+(1-p[2*(t+1)])*frate[2*(t+1)])*gamma[2*(t+1)][1]*I[t+1]);
-			CCu[t+1]     = CCtotal[t+1]-CC[t+1];
-			CCuei[t+1]   = E[t+1]+I[t+1]+CCu[t+1];
-			CCtuei[t+1]  = E[t+1]+I[t+1]+CCtotal[t+1];
 			
-			newCases[t]  = theta[2*t]*gamma[2*t][1]*I[t];
-			newDeaths[t] = gamma[2*t][4]*HD[t];
-			newH[t]      = (p[2*t]*(theta[2*t]-frate[2*t])+frate[2*t])*gamma[2*t][1]*I[t];
-			newE[t]      = (beta[2*t][0]*E[t]+beta[2*t][1]*I[t]+beta[2*t][2]*Iu[t]+beta[2*t][3]*H[t])*S[t]/totalpop;
-			betainE[t]   = (beta[2*t][0]*E[t])*S[t]/totalpop;
-			betainI[t]   = (beta[2*t][1]*I[t])*S[t]/totalpop;
-			betainIu[t]  = (beta[2*t][2]*Iu[t])*S[t]/totalpop;
-			betainHR[t]  = (beta[2*t][3]*HR[t])*S[t]/totalpop;
-			betainHD[t]  = (beta[2*t][4]*HD[t])*S[t]/totalpop;
-			if(((t)%(1/dt)==0)&&((t)*dt<NhistC)) {
-				newE[t]=newE[t]+repdata[(int) Math.floor((t)*dt)][6];//-repdata[(int) Math.floor((t)*dt)][7]; //repdata[t][7] = datoEvac[t];
+			for (int i=0; i<nvariants; i++){ 
+				Rv [t+1][i] = Rv [t][i] + dt/2*(gamma[2*t][5]*Qv[t][i] + gamma[2*(t+1)][5]*Qv[t+1][i]);  // gammaq=gamma[5]
+				CCv[t+1][i] = CCv[t][i] + dt/2*(theta[2*t]*gamma[2*t][1]*states[t][2][i]+theta[2*(t+1)]*gamma[2*(t+1)][1]*states[t+1][2][i]); // I= states[2]; gammai = gamma[1]
+				Dv [t+1][i] = Dv [t][i] + dt/2*(gamma[2*t][4]*states[t][5][i]+gamma[2*(t+1)][4]*states[t+1][5][i]); // HD = states[5]; gammahd = gamma[4]
+				CDv[t+1][i] = Dv[t+1][i];
+				Duv[t+1][i] = Duv[t][i]+ dt/2*(omegau[2*t]*gamma[2*t][1]*states[t][2][i]+omegau[2*(t+1)]*gamma[2*(t+1)][1]*states[t+1][2][i]); 
+				
+				CCtotal[t+1][i] = CCtotal[t][i] + dt/2*(gamma[2*t][1]*I[t][i]+gamma[2*(t+1)][1]*I[t+1][i]);
+				causeE [t+1][i] = causeE [t][i] + dt/2*(beta[2*t][0][i]*E[t][i]*S[t][0]+beta[2*(t+1)][0][i]*E[t+1][i]*S[t+1][0])/totalpop;
+				causeI [t+1][i] = causeI [t][i] + dt/2*(beta[2*t][1][i]*I[t][i]*S[t][0]+beta[2*(t+1)][1][i]*I[t+1][i]*S[t+1][0])/totalpop;
+				causeIu[t+1][i] = causeIu[t][i] + dt/2*(beta[2*t][2][i]*Iu[t][i]*S[t][0]+beta[2*(t+1)][2][i]*Iu[t+1][i]*S[t+1][0])/totalpop;
+				causeH [t+1][i] = causeH [t][i] + dt/2*(beta[2*t][3][i]*HR[t][i]*S[t][0]+beta[2*t][4][i]*HD[t][i]*S[t][0]+beta[2*(t+1)][3][i]*HR[t+1][i]*S[t+1][0]+beta[2*(t+1)][4][i]*HD[t+1][i]*S[t+1][0])/totalpop;
+				altasHos[t+1][i]= altasHos[t][i]+ dt/2*(gamma[2*t][3]*HR[t][i] + gamma[2*(t+1)][3]*HR[t+1][i]);
+				CHos   [t+1][i] = CHos   [t][i] + dt/2*((p[2*t]*theta[2*t]+(1-p[2*t])*frate[2*t])*gamma[2*t][1]*I[t][i]+(p[2*(t+1)]*theta[2*(t+1)]+(1-p[2*(t+1)])*frate[2*(t+1)])*gamma[2*(t+1)][1]*I[t+1][i]);
+				CCu    [t+1][i] = CCtotal[t+1][i] - CCv[t+1][i];
+				CCuei  [t+1][i] = CCu    [t+1][i] + E[t+1][i]+I[t+1][i];
+				CCtuei [t+1][i] = CCtotal[t+1][i] + E[t+1][i]+I[t+1][i];
 			}
+			
+			
+			for (int i=0; i<nvariants; i++){
+				newCases [t][i] = theta[2*t]*gamma[2*t][1]*I[t][i];
+				newDeaths[t][i] = gamma[2*t][4]*HD[t][i];
+				newH     [t][i] = (p[2*t]*(theta[2*t]-frate[2*t])+frate[2*t])*gamma[2*t][1]*I[t][i];
+				newE     [t][i] = (beta[2*t][0][i]*E [t][i]+beta[2*t][1][i]*I[t][i]+beta[2*t][2][i]*Iu[t][i]+beta[2*t][3][i]*HR[t][i]+beta[2*t][4][i]*HD[t][i])*S[t][0]/totalpop;
+				betainE  [t][i] = (beta[2*t][0][i]*E [t][i])*S[t][0]/totalpop;
+				betainI  [t][i] = (beta[2*t][1][i]*I [t][i])*S[t][0]/totalpop;
+				betainIu [t][i] = (beta[2*t][2][i]*Iu[t][i])*S[t][0]/totalpop;
+				betainHR [t][i] = (beta[2*t][3][i]*HR[t][i])*S[t][0]/totalpop;
+				betainHD [t][i] = (beta[2*t][4][i]*HD[t][i])*S[t][0]/totalpop;
+				
+				if(((t)%(1/dt)==0)&&((t)*dt<NhistC)) {
+					newE[t][i]  = newE[t][i]+repdata[(int) Math.floor((t)*dt)][6+i];//-repdata[(int) Math.floor((t)*dt)][7]; //repdata[t][7] = datoEvac[t];
+				}
+			
+			}
+			
+			
 			//-----------------------------------------------------------------------------------------------------
 			
 		}
@@ -1149,18 +1437,20 @@ public class Country {
 
 		
 		// WRITE RESULTS TO CSV:
-		String filePath = outputpath + Integer.toString(nfolder)+"\\";
+		String filePath = outputpath; //+ Integer.toString(nfolder)+"\\";
 		File directory = new File(filePath);
 	    if (! directory.exists()){
 	        directory.mkdirs();
 	    }
-	    writeStatesCSV(S,E,I,Iu,HR,HD,Q,R,D,Du,timestop,filePath+"states.csv");
-	    writeCumulativeCSV(CC,CD,CHos,CCuei,CCtuei,timestop,filePath+"cumulative.csv"); 
-	    writeFeaturesCSV(gamma,beta,cmeasures,frate,omegau,theta,p,2*timestop-1,filePath+"features.csv");
+	    //writeResult(vaccinated[0],dmax,filePath+"u1.txt");
+	    //writeResult(vaccinated[1],dmax,filePath+"u2.txt");
+	    writeStatesCSV(getColumn(S,0),V,E,I,Iu,HR,HD,Qv,Rv,Dv,Duv,timestop,filePath+"states.csv");
+	    writeCumulativeCSV(CCv,CDv,CHos,CCuei,CCtuei,timestop,filePath+"cumulative.csv"); 
+	    writeFeaturesCSV(gamma,getMatrix(beta,0),cmeasures,frate,omegau,theta,p,2*timestop-1,filePath+"features.csv");
 	    writeNewInECSV(betainE,betainI,betainIu,betainHR,betainHD,newE,newCases,newH,newDeaths,timestop,filePath+"newin.csv");
 	    writeCausesCSV(causeE,causeI,causeIu,causeH,timestop,filePath+"causesOfInfection.csv");
 		
-		computeR(filePath, timestop, S, beta, gamma, frate, theta, p, omegau);
+		computeR(filePath, timestop, getColumn(S,0), E, beta, gamma, frate, theta, p, omegau);
 	}
 	
 	public void evaluatepost(){
@@ -1171,14 +1461,46 @@ public class Country {
 		double varduri = 0.0; 
 		int tdur=0;
 		try{
-			Date datech = format.parse(csvdatesch[0]);
-			tdur = (int)((Math.round(datech.getTime()/(3600000*24)) - Math.round(dateinit.getTime()/(3600000*24)))); 
+			if(csvdatesch[0]!=null){
+				Date datech = format.parse(csvdatesch[0]);
+				tdur = (int)((Math.round(datech.getTime()/(3600000*24)) - Math.round(dateinit.getTime()/(3600000*24)))); 
+			}
+			else{
+				tdur  = 0;
+			}
+			
 		}catch (ParseException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
 		evaluatepost (nfolder, delay, tdur, csvdur, varduri, csvbetai, csvcoef, csvkappa, csvm, kappasanit, msanit, csvFR, csvp);
+	}
+	
+	// TO WRITE RESULTS TO TXT
+	private void writeResult(double[] result, int maxtime, String file){
+		FileWriter fichero = null;
+        	PrintWriter pw = null;
+        	try
+        	{
+            		fichero = new FileWriter(file);
+            		pw = new PrintWriter(fichero);
+	
+            		for (int i = 0; i < maxtime; i++){
+            			pw.println(result[i]);
+            		}
+        	} catch (Exception e) {
+           	 	e.printStackTrace();
+        	} finally {
+           	try {
+           		// Nuevamente aprovechamos el finally para 
+           		// asegurarnos que se cierra el fichero.
+           		if (null != fichero)
+              			fichero.close();
+           	} catch (Exception e2) {
+             	 	e2.printStackTrace();
+           	}
+        	}
 	}
 	
 	// TO WRITE RESULTS TO CSV
@@ -1218,20 +1540,88 @@ public class Country {
         }
 	}
 	
-	private void writeStatesCSV(double[] S, double[] E, double[] I, double[] Iu, double[] HR, double[] HD, double[] Q, double[] R, double[] D, double[] Du, int maxtime, String file){
-		String [] namescol  = {"S", "E","I","Iu","HR","HD","Q","R","D","Du"};
-		double[][] allstates= {S,E,I,Iu,HR,HD,Q,R,D,Du};
+	private void writeStatesCSV(double[] S, double[][] V, double[][] E, double[][] I, double[][] Iu, double[][] HR, double[][] HD, double[][] Q, double[][] R, double[][] D, double[][] Du, int maxtime, String file){
+		String[] basicnames = {"S","V","E","I","Iu","HR","HD","Q","R","D","Du"};
+		int len   = basicnames.length;
+		String[] namescol   = new String[len+(len-2)*nvariants+(nvaccines-1)];
+		double[][] allstates= new double[len+(len-2)*nvariants+(nvaccines-1)][S.length];
+		//double[][] allstates= {S,V,E,I,Iu,HR,HD,Q,R,D,Du};
+		allstates[0] = S;
+		namescol [0] = basicnames[0];
+		for(int j=0; j<nvaccines; j++) {
+			allstates[j+1] = V[j];
+			namescol [j+1] = basicnames[1]+Integer.toString(j+1);
+		}
+		for(int col=2; col<len; col++){
+			namescol[col+(nvaccines-1)] = basicnames[col];
+		}
+		for(int i=0; i<nvariants;i++){
+			for(int t=0; t<S.length;t++){
+				allstates[nvaccines+1][t] = allstates[nvaccines+1][t] + getColumn(E, i)[t];
+				allstates[nvaccines+2][t] = allstates[nvaccines+2][t] + getColumn(I, i)[t];
+				allstates[nvaccines+3][t] = allstates[nvaccines+3][t] + getColumn(Iu,i)[t];
+				allstates[nvaccines+4][t] = allstates[nvaccines+4][t] + getColumn(HR,i)[t];
+				allstates[nvaccines+5][t] = allstates[nvaccines+5][t] + getColumn(HD,i)[t];
+				allstates[nvaccines+6][t] = allstates[nvaccines+6][t] + getColumn(Q, i)[t];
+				allstates[nvaccines+7][t] = allstates[nvaccines+7][t] + getColumn(R, i)[t];
+				allstates[nvaccines+8][t] = allstates[nvaccines+8][t] + getColumn(D, i)[t];
+				allstates[nvaccines+9][t] = allstates[nvaccines+9][t] + getColumn(Du,i)[t];
+			}
+			allstates[len+(len-2)*i+(nvaccines-1)+0] = getColumn(E, i);
+			allstates[len+(len-2)*i+(nvaccines-1)+1] = getColumn(I, i);
+			allstates[len+(len-2)*i+(nvaccines-1)+2] = getColumn(Iu,i);
+			allstates[len+(len-2)*i+(nvaccines-1)+3] = getColumn(HR,i);
+			allstates[len+(len-2)*i+(nvaccines-1)+4] = getColumn(HD,i);
+			allstates[len+(len-2)*i+(nvaccines-1)+5] = getColumn(Q, i);
+			allstates[len+(len-2)*i+(nvaccines-1)+6] = getColumn(R, i);
+			allstates[len+(len-2)*i+(nvaccines-1)+7] = getColumn(D, i);
+			allstates[len+(len-2)*i+(nvaccines-1)+8] = getColumn(Du,i);
+			namescol [len+(len-2)*i+(nvaccines-1)+0] = basicnames[2]+Integer.toString(i+1);
+			namescol [len+(len-2)*i+(nvaccines-1)+1] = basicnames[3]+Integer.toString(i+1);
+			namescol [len+(len-2)*i+(nvaccines-1)+2] = basicnames[4]+Integer.toString(i+1);
+			namescol [len+(len-2)*i+(nvaccines-1)+3] = basicnames[5]+Integer.toString(i+1);
+			namescol [len+(len-2)*i+(nvaccines-1)+4] = basicnames[6]+Integer.toString(i+1);
+			namescol [len+(len-2)*i+(nvaccines-1)+5] = basicnames[7]+Integer.toString(i+1);
+			namescol [len+(len-2)*i+(nvaccines-1)+6] = basicnames[8]+Integer.toString(i+1);
+			namescol [len+(len-2)*i+(nvaccines-1)+7] = basicnames[9]+Integer.toString(i+1);
+			namescol [len+(len-2)*i+(nvaccines-1)+8] = basicnames[10]+Integer.toString(i+1);
+		}
 		writeCSV(namescol, allstates, maxtime, file);
 	}
 	
-	private void writeCumulativeCSV(double[] cases, double[] deaths, double[] chos, double[] ccuei, double[] cctotalei, int maxtime, String file){
-		String [] namescol = {"CC", "CD","CHos","CCuEI","CCtotalEI"};
-		double[][] results = {cases,deaths,chos,ccuei,cctotalei};
+	private void writeCumulativeCSV(double[][] cases, double[][] deaths, double[][] chos, double[][] ccuei, double[][] cctotalei, int maxtime, String file){
+		String[] basicnames = {"CC", "CD","CHos","CCuEI","CCtotalEI"};
+		int len = basicnames.length;
+		String[] namescol   = new String[len*(nvariants+1)];
+		double[][] results  = new double[len*(nvariants+1)][cases.length];
+		//double[][] results = {cases,deaths,chos,ccuei,cctotalei};
+		for(int col=0; col<len; col++){
+			namescol[col] = basicnames[col];
+		}
+		for(int i=0; i<nvariants;i++){
+			for(int t=0; t<cases.length;t++){
+				results[0][t] = results[0][t] + getColumn(cases,    i)[t];
+				results[1][t] = results[1][t] + getColumn(deaths,   i)[t];
+				results[2][t] = results[2][t] + getColumn(chos,     i)[t];
+				results[3][t] = results[3][t] + getColumn(ccuei,    i)[t];
+				results[4][t] = results[4][t] + getColumn(cctotalei,i)[t];
+			}
+			results [len*(i+1)+0] = getColumn(cases,     i);
+			results [len*(i+1)+1] = getColumn(deaths,    i);
+			results [len*(i+1)+2] = getColumn(chos,      i);
+			results [len*(i+1)+3] = getColumn(ccuei,     i);
+			results [len*(i+1)+4] = getColumn(cctotalei, i);
+			namescol[len*(i+1)+0] = basicnames[0]+Integer.toString(i+1);
+			namescol[len*(i+1)+1] = basicnames[1]+Integer.toString(i+1);
+			namescol[len*(i+1)+2] = basicnames[2]+Integer.toString(i+1);
+			namescol[len*(i+1)+3] = basicnames[3]+Integer.toString(i+1);
+			namescol[len*(i+1)+4] = basicnames[4]+Integer.toString(i+1);
+		}
 		writeCSV(namescol, results, maxtime, file);
 	}
 	
 	private void writeFeaturesCSV(double[][] gammas, double[][] betas, double[][] cntrmeas, double[] omega, double[] omegau, double[] theta, double[] p, int maxtime, String file){
-		String [] namescol = {"gammae","gammai","gammaiu","gammahr","gammahd","gammaq","mbetae","mbetai","mbetaiu","mbetahr","mbetahd","cmsocial","cmsanit","omega","omegau","theta","p"};
+		String [] namescol = {"gammae","gammai","gammaiu","gammahr","gammahd","gammaq","mbetae1","mbetai1","mbetaiu1","mbetahr1","mbetahd1","cmsocial","cmsanit","omega","omegau","theta","p"};
 		FileWriter fichero = null;
         PrintWriter pw = null;
         try
@@ -1277,222 +1667,217 @@ public class Country {
         }
 	}
 	
-	private void writeNewInECSV(double[] fromE, double[] fromI, double[]fromIu, double[] fromHR, double[] fromHD, double[] newE, double[] newC, double[] newH, double[] newD, int maxtime, String file){
-		String [] namescol = {"New E from E", "New E From I","New E From Iu","New E From HR","New E From HD","New E (total)","New Cases","New Hos","New Deaths"};
-		double[][] results = {fromE,fromI,fromIu,fromHR,fromHD,newE,newC,newH,newD};
+	private void writeNewInECSV(double[][] fromE, double[][] fromI, double[][] fromIu, double[][] fromHR, double[][] fromHD, double[][] newE, double[][] newC, double[][] newH, double[][] newD, int maxtime, String file){
+		String[] basicnames = {"New E from E", "New E From I","New E From Iu","New E From HR","New E From HD","New E (total)","New Cases","New Hos","New Deaths"};
+		int len = basicnames.length;
+		String[] namescol   = new String[len*(nvariants+1)];
+		double[][] results  = new double[len*(nvariants+1)][fromE.length];
+		//double[][] results = {fromE,fromI,fromIu,fromHR,fromHD,newE,newC,newH,newD};
+		for(int col=0; col<len; col++){
+			namescol[col] = basicnames[col];
+		}
+		for(int i=0; i<nvariants;i++){
+			for(int t=0; t<fromE.length;t++){
+				results[0][t] = results[0][t] + getColumn(fromE, i)[t];
+				results[1][t] = results[1][t] + getColumn(fromI, i)[t];
+				results[2][t] = results[2][t] + getColumn(fromIu,i)[t];
+				results[3][t] = results[3][t] + getColumn(fromHR,i)[t];
+				results[4][t] = results[4][t] + getColumn(fromHD,i)[t];
+				results[5][t] = results[5][t] + getColumn(newE,  i)[t];
+				results[6][t] = results[6][t] + getColumn(newC,  i)[t];
+				results[7][t] = results[7][t] + getColumn(newH,  i)[t];
+				results[8][t] = results[8][t] + getColumn(newD,  i)[t];
+			}
+			results [len*(i+1)+0] = getColumn(fromE, i);
+			results [len*(i+1)+1] = getColumn(fromI, i);
+			results [len*(i+1)+2] = getColumn(fromIu,i);
+			results [len*(i+1)+3] = getColumn(fromHR,i);
+			results [len*(i+1)+4] = getColumn(fromHD,i);
+			results [len*(i+1)+5] = getColumn(newE,  i);
+			results [len*(i+1)+6] = getColumn(newC,  i);
+			results [len*(i+1)+7] = getColumn(newH,  i);
+			results [len*(i+1)+8] = getColumn(newD,  i);
+			namescol[len*(i+1)+0] = basicnames[0]+Integer.toString(i+1);
+			namescol[len*(i+1)+1] = basicnames[1]+Integer.toString(i+1);
+			namescol[len*(i+1)+2] = basicnames[2]+Integer.toString(i+1);
+			namescol[len*(i+1)+3] = basicnames[3]+Integer.toString(i+1);
+			namescol[len*(i+1)+4] = basicnames[4]+Integer.toString(i+1);
+			namescol[len*(i+1)+5] = basicnames[5]+Integer.toString(i+1);
+			namescol[len*(i+1)+6] = basicnames[6]+Integer.toString(i+1);
+			namescol[len*(i+1)+7] = basicnames[7]+Integer.toString(i+1);
+			namescol[len*(i+1)+8] = basicnames[8]+Integer.toString(i+1);
+		}
 		writeCSV(namescol, results, maxtime, file);
 	}
 	
-	private void writeCausesCSV(double[] causeE, double[] causeI, double[] causeIu, double[] causeH, int maxtime, String file){
-		String [] namescol = {"Caused by E", "Caused by I","Caused by Iu","Caused by H"};
-		double[][] results = {causeE,causeI,causeIu,causeH};
+	private void writeCausesCSV(double[][] causeE, double[][] causeI, double[][] causeIu, double[][] causeH, int maxtime, String file){
+		String[] basicnames = {"Caused by E", "Caused by I","Caused by Iu","Caused by H"};
+		int len = basicnames.length;
+		String[] namescol   = new String[len*(nvariants+1)];
+		double[][] results  = new double[len*(nvariants+1)][causeE.length];
+		//double[][] results = {causeE,causeI,causeIu,causeH};
+		for(int col=0; col<len; col++){
+			namescol[col] = basicnames[col];
+		}
+		for(int i=0; i<nvariants;i++){
+			for(int t=0; t<causeE.length;t++){
+				results[0][t] = results[0][t] + getColumn(causeE, i)[t];
+				results[1][t] = results[1][t] + getColumn(causeI, i)[t];
+				results[2][t] = results[2][t] + getColumn(causeIu,i)[t];
+				results[3][t] = results[3][t] + getColumn(causeH,i)[t];
+			}
+			results [len*(i+1)+0] = getColumn(causeE, i);
+			results [len*(i+1)+1] = getColumn(causeI, i);
+			results [len*(i+1)+2] = getColumn(causeIu,i);
+			results [len*(i+1)+3] = getColumn(causeH, i);
+			namescol[len*(i+1)+0] = basicnames[0]+Integer.toString(i+1);
+			namescol[len*(i+1)+1] = basicnames[1]+Integer.toString(i+1);
+			namescol[len*(i+1)+2] = basicnames[2]+Integer.toString(i+1);
+			namescol[len*(i+1)+3] = basicnames[3]+Integer.toString(i+1);
+		}
 		writeCSV(namescol, results, maxtime, file);
 	}
 	
-	// TO WRITE RESULTS TO TXT
-	private void writeResult(double[] result, int maxtime, String file){
-		FileWriter fichero = null;
-        PrintWriter pw = null;
-        try
-        {
-            fichero = new FileWriter(file);
-            pw = new PrintWriter(fichero);
-
-            for (int i = 0; i < maxtime; i++){
-            		pw.println(result[i]);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-           try {
-           // Nuevamente aprovechamos el finally para 
-           // asegurarnos que se cierra el fichero.
-           if (null != fichero)
-              fichero.close();
-           } catch (Exception e2) {
-              e2.printStackTrace();
-           }
-        }
-	}
-	
-	private void writeStates(double[] S, double[] E, double[] I, double[] Iu, double[] HR, double[] HD, double[] Q, double[] R, double[] D, double[] Du, int maxtime, String file){
-		String fileS = file + "S.txt";
-		String fileE = file + "E.txt";
-		String fileI = file + "I.txt";
-		String fileIu = file + "Iu.txt";
-		String fileHR = file + "HR.txt";
-		String fileHD = file + "HD.txt";
-		String fileQ = file + "Q.txt";
-		String fileR = file + "R.txt";
-		String fileD = file + "D.txt";
-		String fileDu= file + "Du.txt";
-		writeResult(S, maxtime, fileS);
-		writeResult(E, maxtime, fileE);
-		writeResult(I, maxtime, fileI);
-		writeResult(Iu, maxtime, fileIu);
-		writeResult(HR, maxtime, fileHR);
-		writeResult(HD, maxtime, fileHD);
-		writeResult(Q, maxtime, fileQ);
-		writeResult(R, maxtime, fileR);
-		writeResult(D, maxtime, fileD);
-		writeResult(Du, maxtime, fileDu);
-	}
-	
-	private void writeCumulative(double[] cases, double[] deaths, double[] chos, int maxtime, String file){
-		String fileCC = file + "CC.txt";
-		String fileCD = file + "CD.txt";
-		String fileCH = file + "CHos.txt";
-		writeResult(cases, maxtime, fileCC);
-		writeResult(deaths, maxtime, fileCD);
-		writeResult(chos, maxtime, fileCH);
-	}
-	
-	private void writeCauses(double[] causeE, double[] causeI, double[] causeIu, double[] causeH, int maxtime, String file){
-		String fileCauseE = file + "causeE.txt";
-		String fileCauseI = file + "causeI.txt";
-		String fileCauseIu = file+ "causeIu.txt";
-		String fileCauseH = file + "causeH.txt";
-		writeResult(causeE, maxtime, fileCauseE);
-		writeResult(causeI, maxtime, fileCauseI);
-		writeResult(causeIu, maxtime, fileCauseIu);
-		writeResult(causeH, maxtime, fileCauseH);
-	}
-	
-	private void writeTotalWithUn(double[] cctotalei, double[] ccuei, int maxtime, String file){
-		String fileCCtotalEI = file + "CCtotalEI.txt";
-		String fileCCuEI     = file + "CCuEI.txt";
-		writeResult(cctotalei, maxtime, fileCCtotalEI);
-		writeResult(ccuei, maxtime, fileCCuEI);
-	}
-	
-	private void writeFeatures(double[][] feature, int maxtime, String filepath, String[] featnames){
-		int nf = featnames.length;
-		String[] files = new String[nf];
-		FileWriter[] fichero = new FileWriter[nf];
-        PrintWriter[] pw = new PrintWriter[nf];
-		try{
-			for (int k=0; k<nf; k++){
-				files[k]   = filepath + featnames[k];
-				fichero[k] = new FileWriter(files[k]);
-				pw[k]      = new PrintWriter(fichero[k]);
-			}
-			for (int k=0; k<nf; k++){
-		            for (int t = 0; t < maxtime; t++){
-		            	pw[k].println(feature[t][k]);
-		            }
-			}
-			for (int k=0; k<nf; k++){
-				fichero[k].close();
-			}
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-           try {
-           // Nuevamente aprovechamos el finally para 
-           // asegurarnos que se cierra el fichero.
-        	   for (int k=0; k<nf; k++){  
-		           if (null != fichero[k])
-		              fichero[k].close();
-        	   }
-           } catch (Exception e2) {
-              e2.printStackTrace();
-           }
-        }
-	}
-	
-	private void computeR(String file, int tmax, double[] S, double[][] beta, double[][] gamma,  double[] fatrate, double[] theta, double[] p, double[] omegau){
+	private void computeR(String file, int tmax, double[] S, double[][] E, double[][][] beta, double[][] gamma,  double[] fatrate, double[] theta, double[] p, double[] omegau){
 		double betaIDu = 0.0; // No lo utilizamos todavía
 		double gammaIDu= 1.0; // No lo utilizamos todavía
 		
 		// CALCULO DE Re -------------------------------------------------------------------------------
-		double[] Re = new double[tmax];
-		double[] ReE = new double[tmax];
-		double[] ReI = new double[tmax];
-		double[] ReIu = new double[tmax];
-		double[] ReHR = new double[tmax];
-		double[] ReHD = new double[tmax];
-		int t = 0;
-		while((Math.round(t+(1/gamma[2*t][0]+1/gamma[2*t][1]+1/gamma[2*t][2])/dt)<tmax-20)&&(Math.round(t+Math.round(1/gamma[2*t][0]+1/gamma[2*t][1]+1/gammaIDu)/dt)<tmax-20)&&
-				(Math.round(t+Math.round(1/gamma[2*t][0]+1/gamma[2*t][1]+1/gamma[2*t][3])/dt)<tmax-20)&&(Math.round(t+Math.round(1/gamma[2*t][0]+1/gamma[2*t][1]+1/gamma[2*t][4])/dt)<tmax-20))	{
-			
-			int nint=(int) Math.floor((1/gamma[2*t][0])/dt);
-			double[] timeE = new double[nint+1];
-			double[] fE    = new double[nint+1];
-			for(int i=0;i<=nint; i++){
-				timeE[i]= t+i;
-				fE [i]  = beta[(int)Math.floor(2*timeE[i])][0]*S[(int)Math.floor(timeE[i])]/totalpop;
-				timeE[i]= timeE[i]*dt; 
+		double[][] Re   = new double[tmax][nvariants];
+		double[][] ReE  = new double[tmax][nvariants];
+		double[][] ReI  = new double[tmax][nvariants];
+		double[][] ReIu = new double[tmax][nvariants];
+		double[][] ReHR = new double[tmax][nvariants];
+		double[][] ReHD = new double[tmax][nvariants];
+		double[]   R0   = new double[nvariants];
+		double[] totalRe= new double[tmax];
+		double[] sumE   = new double[tmax];
+		
+		for (int t=0; t<tmax; t++){
+			for (int ivar=0; ivar<nvariants; ivar++){
+				sumE[t] = sumE[t] + E[t][ivar];
 			}
-			
-			nint=(int) Math.floor((1/gamma[2*t][1])/dt);
-			double[] timeI = new double[nint+1];
-			double[] fI    = new double[nint+1];
-			for(int i=0;i<=nint; i++){
-				timeI[i]= t+(1/gamma[2*t][0])/dt+i;
-				fI [i]  = beta[(int)Math.floor(2*timeI[i])][1]*S[(int)Math.floor(timeI[i])]/totalpop;
-				timeI[i]= timeI[i]*dt;
-			}
-			
-			nint=(int) Math.floor((1/gamma[2*t][2])/dt);
-			double[] timeIu = new double[nint+1];
-			double[] fIu    = new double[nint+1];
-			for(int i=0;i<=nint; i++){
-				timeIu[i]= t+(1/gamma[2*t][0]+1/gamma[2*t][1])/dt+i;
-				fIu [i]  = beta[(int)Math.floor(2*timeIu[i])][2]*S[(int)Math.floor(timeIu[i])]/totalpop;
-				timeIu[i]= timeIu[i]*dt;
-			}
-			
-			nint=(int) Math.floor((1/gammaIDu)/dt);
-			double[] timeIdu = new double[nint+1];
-			double[] fIdu    = new double[nint+1];
-			for(int i=0;i<=nint; i++){
-				timeIdu[i]= t+(1/gamma[2*t][0]+1/gamma[2*t][1])/dt+i;
-				fIdu [i]  = betaIDu*S[(int)Math.floor(timeIdu[i])]/totalpop;
-				timeIdu[i]= timeIdu[i]*dt;
-			}
-			
-			nint=(int)Math.floor((1/gamma[2*t][3])/dt);
-			double[] timeHR = new double[nint+1];
-			double[] fHR    = new double[nint+1];
-			for(int i=0;i<=nint; i++){
-				timeHR[i]= t+(1/gamma[2*t][0]+1/gamma[2*t][1])/dt+i;
-				//System.out.println("tiempo "+t+ "tiempoHR "+timeHR[i]);
-				fHR [i]  = beta[(int)Math.floor(2*timeHR[i])][3]*S[(int)Math.floor(timeHR[i])]/totalpop;
-				timeHR[i]= timeHR[i]*dt;
-			}
-			
-			nint=(int) Math.floor((1/gamma[2*t][4])/dt);
-			double[] timeHD = new double[nint+1];
-			double[] fHD    = new double[nint+1];
-			for(int i=0;i<=nint; i++){
-				timeHD[i]= t+(1/gamma[2*t][0]+1/gamma[2*t][1])/dt+i;
-				fHD [i]  = beta[(int)Math.floor(2*timeHD[i])][4]*S[(int)Math.floor(timeHD[i])]/totalpop;
-				timeHD[i]= timeHD[i]*dt;
-			}
-			
-			int tfts = (int)(2*Math.floor(t+(1/gamma[2*t][0]+1/gamma[2*t][1])/dt));
-			Re[t] = simpson(timeE,fE)+simpson(timeI,fI)+(1-theta[tfts]-omegau[tfts])*simpson(timeIu,fIu)+
-					omegau[tfts]*simpson(timeIdu,fIdu)+p[tfts]*(theta[tfts]-fatrate[tfts])*simpson(timeHR,fHR)+
-					fatrate[tfts]*simpson(timeHD,fHD);//
-
-			ReE[t] = simpson(timeE,fE);//
-			ReI[t] = simpson(timeI,fI);//
-			ReIu[t] = (1-theta[tfts]-omegau[tfts])*simpson(timeIu,fIu);//
-			ReHR[t] = p[tfts]*(theta[tfts]-fatrate[tfts])*simpson(timeHR,fHR);//
-			ReHD[t] = fatrate[tfts]*simpson(timeHD,fHD);//
-			
-			t++;
-			
 		}
 		
-		// CALCULO R0 -----------------------------------------------------------------------------------
-		double R0 = Re[0];
+		for (int ivar=0; ivar<nvariants; ivar++){
+			int t = 0;
+			while((Math.round(t+(1/gamma[2*t][0]+1/gamma[2*t][1]+1/gamma[2*t][2])/dt)<tmax-20)&&(Math.round(t+Math.round(1/gamma[2*t][0]+1/gamma[2*t][1]+1/gammaIDu)/dt)<tmax-20)&&
+					(Math.round(t+Math.round(1/gamma[2*t][0]+1/gamma[2*t][1]+1/gamma[2*t][3])/dt)<tmax-20)&&(Math.round(t+Math.round(1/gamma[2*t][0]+1/gamma[2*t][1]+1/gamma[2*t][4])/dt)<tmax-20))	{
+				
+				int nint=(int) Math.floor((1/gamma[2*t][0])/dt);
+				double[] timeE = new double[nint+1];
+				double[] fE    = new double[nint+1];
+				for(int i=0;i<=nint; i++){
+					timeE[i]= t+i;
+					fE [i]  = beta[(int)Math.floor(2*timeE[i])][0][ivar]*S[(int)Math.floor(timeE[i])]/totalpop;
+					timeE[i]= timeE[i]*dt; 
+				}
+				
+				nint=(int) Math.floor((1/gamma[2*t][1])/dt);
+				double[] timeI = new double[nint+1];
+				double[] fI    = new double[nint+1];
+				for(int i=0;i<=nint; i++){
+					timeI[i]= t+(1/gamma[2*t][0])/dt+i;
+					fI [i]  = beta[(int)Math.floor(2*timeI[i])][1][ivar]*S[(int)Math.floor(timeI[i])]/totalpop;
+					timeI[i]= timeI[i]*dt;
+				}
+				
+				nint=(int) Math.floor((1/gamma[2*t][2])/dt);
+				double[] timeIu = new double[nint+1];
+				double[] fIu    = new double[nint+1];
+				for(int i=0;i<=nint; i++){
+					timeIu[i]= t+(1/gamma[2*t][0]+1/gamma[2*t][1])/dt+i;
+					fIu [i]  = beta[(int)Math.floor(2*timeIu[i])][2][ivar]*S[(int)Math.floor(timeIu[i])]/totalpop;
+					timeIu[i]= timeIu[i]*dt;
+				}
+				
+				nint=(int) Math.floor((1/gammaIDu)/dt);
+				double[] timeIdu = new double[nint+1];
+				double[] fIdu    = new double[nint+1];
+				for(int i=0;i<=nint; i++){
+					timeIdu[i]= t+(1/gamma[2*t][0]+1/gamma[2*t][1])/dt+i;
+					fIdu [i]  = betaIDu*S[(int)Math.floor(timeIdu[i])]/totalpop;
+					timeIdu[i]= timeIdu[i]*dt;
+				}
+				
+				nint=(int)Math.floor((1/gamma[2*t][3])/dt);
+				double[] timeHR = new double[nint+1];
+				double[] fHR    = new double[nint+1];
+				for(int i=0;i<=nint; i++){
+					timeHR[i]= t+(1/gamma[2*t][0]+1/gamma[2*t][1])/dt+i;
+					//System.out.println("tiempo "+t+ "tiempoHR "+timeHR[i]);
+					fHR [i]  = beta[(int)Math.floor(2*timeHR[i])][3][ivar]*S[(int)Math.floor(timeHR[i])]/totalpop;
+					timeHR[i]= timeHR[i]*dt;
+				}
+				
+				nint=(int) Math.floor((1/gamma[2*t][4])/dt);
+				double[] timeHD = new double[nint+1];
+				double[] fHD    = new double[nint+1];
+				for(int i=0;i<=nint; i++){
+					timeHD[i]= t+(1/gamma[2*t][0]+1/gamma[2*t][1])/dt+i;
+					fHD [i]  = beta[(int)Math.floor(2*timeHD[i])][4][ivar]*S[(int)Math.floor(timeHD[i])]/totalpop;
+					timeHD[i]= timeHD[i]*dt;
+				}
+				
+				int tfts = (int)(2*Math.floor(t+(1/gamma[2*t][0]+1/gamma[2*t][1])/dt));
+				Re[t][ivar] = simpson(timeE,fE)+simpson(timeI,fI)+(1-theta[tfts]-omegau[tfts])*simpson(timeIu,fIu)+
+						omegau[tfts]*simpson(timeIdu,fIdu)+p[tfts]*(theta[tfts]-fatrate[tfts])*simpson(timeHR,fHR)+
+						fatrate[tfts]*simpson(timeHD,fHD);//
+	
+				ReE [t][ivar] = simpson(timeE,fE);//
+				ReI [t][ivar] = simpson(timeI,fI);//
+				ReIu[t][ivar] = (1-theta[tfts]-omegau[tfts])*simpson(timeIu,fIu);//
+				ReHR[t][ivar] = p[tfts]*(theta[tfts]-fatrate[tfts])*simpson(timeHR,fHR);//
+				ReHD[t][ivar] = fatrate[tfts]*simpson(timeHD,fHD);//
+				
+				t++;
+			
+			}
 		
+		
+			// CALCULO R0 -----------------------------------------------------------------------------------
+			R0[ivar] = Re[0][ivar];
+			//-----------------------------------------------------------------------------------------------
+		}
+		
+		// CALCULO Re total
+		for (int t=0; t<tmax; t++){
+			for (int ivar=0; ivar<nvariants; ivar++){
+				totalRe[t] = totalRe[t] + (E[t][ivar]*Re[t][ivar])/sumE[t];
+				if(E[t][ivar]==0){
+					Re  [t][ivar] = 0.0;
+					ReE [t][ivar] = 0.0;
+					ReI [t][ivar] = 0.0;
+					ReIu[t][ivar] = 0.0;
+					ReHR[t][ivar] = 0.0;
+					ReHD[t][ivar] = 0.0;
+				}
+			}
+		}
 		//-----------------------------------------------------------------------------------------------
 		
 		// IMPRIMIMOS A FICHERO CSV:-----------------------------------------------------------------------------
-		String [] namescol = {"Re", "Re E","Re I","Re Iu","Re HR","Re HD"};
-		double[][] results = {Re,ReE,ReI,ReIu,ReHR,ReHD};
+		String[] basicnames = {"Total Re", "Re", "Re E", "Re I", "Re Iu", "Re HR", "Re HD"};
+		int len = basicnames.length;
+		//double[][] results = {Re,ReE,ReI,ReIu,ReHR,ReHD};
+		String[] namescol   = new String[1+(len-1)*nvariants];
+		double[][] results  = new double[1+(len-1)*nvariants][tmax];
+		results [0] = totalRe; 
+		namescol[0] = basicnames[0];
+		for(int i=0; i<nvariants;i++){
+			results [(len-1)*i+1] = getColumn(Re,  i);
+			results [(len-1)*i+2] = getColumn(ReE, i);
+			results [(len-1)*i+3] = getColumn(ReI, i);
+			results [(len-1)*i+4] = getColumn(ReIu,i);
+			results [(len-1)*i+5] = getColumn(ReHR,i);
+			results [(len-1)*i+6] = getColumn(ReHD,i);
+			namescol[(len-1)*i+1] = basicnames[1]+Integer.toString(i+1);
+			namescol[(len-1)*i+2] = basicnames[2]+Integer.toString(i+1);
+			namescol[(len-1)*i+3] = basicnames[3]+Integer.toString(i+1);
+			namescol[(len-1)*i+4] = basicnames[4]+Integer.toString(i+1);
+			namescol[(len-1)*i+5] = basicnames[5]+Integer.toString(i+1);
+			namescol[(len-1)*i+6] = basicnames[6]+Integer.toString(i+1);
+		}
 		writeCSV(namescol, results, tmax, file+"\\Re.csv");
         //----------------------------------------------------------------------------------------------------
 		
@@ -1507,5 +1892,21 @@ public class Country {
 		return integral;
 	}
 	
+	private double[] getColumn(double[][] matrix, int ncol){
+		double[] column = new double[matrix.length];
+		for (int r=0; r<column.length; r++){
+			column[r] = matrix[r][ncol];
+		}
+		return column;
+	}
 	
+	private double[][] getMatrix(double[][][] matrix3d, int index){
+		double[][] matrix2d = new double[matrix3d.length][matrix3d[0].length];
+		for (int i=0; i<matrix3d.length; i++){
+			for (int j=0; j<matrix3d[0].length; j++){
+				matrix2d[i][j] = matrix3d[i][j][index];
+			}
+		}
+		return matrix2d;
+	}
 }
