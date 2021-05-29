@@ -56,14 +56,14 @@ Some IMPORTANT NOVELTIES incorporated in the version of January 2021 are:
    
    There, the user can change some input parameters about the disease and the control measures and also can update the time series with the data reported by the country authorities. 
    
-   (*) It is only needed since the May 2021 version of the model, which included the improvements detailed in the Annex of Ref. [2].
+   (*) It is only needed since the May 2021 version of the model, which includes the improvements detailed in the Annex of Ref. [2].
 
 3) Double click on the Java executable jar file: 
    - runItaly.jar: to execute the Italy scenario number 1, which corresponds to the simulations included in [1];
      or
    - runItaly_VariantsVaccines.jar: to execute Italy scenarios from 2 to 5. They correspond to the simulations included in [2];
      or
-   - runItaly_Vaccines_May2021.jar: to execute Italy scenarios from 6 to 9. They correspond to the simulations included in the Annex [2].
+   - runItaly_Vaccines_May2021.jar: to execute Italy scenarios from 6 to 9. They correspond to the simulations included in the Annex of [2].
 
 4) Check the obtained results in the folder "Output", within a subfolder named as the country and the number of the scenario. The numerical results are organized in different CSV files.
 
